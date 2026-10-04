@@ -86,11 +86,11 @@ def is_admin(message):
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
-   text = (
-    "👋 Здравствуйте! Я ИИ-ассистент компании <b>B2B Логистика</b>.\n\n"
-    "Помогу с оптовыми поставками, грузоперевозками и складом.\n\n"
-    "Как я могу к вам обращаться? 😊"
-) 
+    text = (
+        "👋 Здравствуйте! Я ИИ-ассистент компании <b>B2B Логистика</b>.\n\n"
+        "Помогу с оптовыми поставками, грузоперевозками и складом.\n\n"
+        "Как я могу к вам обращаться? 😊"
+    )
     await message.answer(text)
 
 
