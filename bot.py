@@ -321,15 +321,15 @@ async def handle_message(message: types.Message):
         return
 
     history = get_memory(user_id)[-10:]
-ai_text = await ask_groq(history)
+    ai_text = await ask_groq(history)
 
-# ЗАЩИТА ОТ ПОВТОРОВ: если бот отвечает то же самое — меняем ответ
-last_bot_messages = [m["content"] for m in history[-5:] if m.get("role") == "assistant"]
-if last_bot_messages and ai_text.strip() == last_bot_messages[-1].strip():
-    logger.warning(f"⚠️ Бот повторился: {ai_text}")
-    ai_text = "Простите, я вас услышал. Уточните, пожалуйста, что именно нужно?"
+    # ЗАЩИТА ОТ ПОВТОРОВ: если бот повторяет ответ — меняем
+    last_bot_messages = [m["content"] for m in history[-5:] if m.get("role") == "assistant"]
+    if last_bot_messages and ai_text.strip() == last_bot_messages[-1].strip():
+        logging.warning(f"⚠️ Бот повторился: {ai_text}")
+        ai_text = "Простите, я вас услышал. Уточните, пожалуйста, что именно нужно?"
 
-add_to_memory(user_id, "assistant", ai_text)
+    add_to_memory(user_id, "assistant", ai_text)
 
     await message.answer(ai_text)
 
