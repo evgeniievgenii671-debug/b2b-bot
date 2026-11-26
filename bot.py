@@ -41,9 +41,9 @@ def save_demo(data):
 demo_data = load_demo()
 adding_mode = {"active": False}
 
-# ============ ЛИМИТЫ НА СООБЩЕНИЯ ============
-user_message_counts = {} 
-MAX_MESSAGES_PER_DAY = 20 
+# ============ ЗАЩИТА ОТ СПАМА (АНТИ-ФЛУД) ============
+# Если клиент пишет больше 3 сообщений подряд без пауз (за 10 секунд), бот делает паузу.
+user_last_message_time = {}
 
 # ============ КЛЮЧЕВЫЕ СЛОВА ============
 DEMO_KEYWORDS = [
@@ -86,8 +86,8 @@ def is_admin(message):
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
-    # Сброс лимита при старте (по желанию можно убрать)
-    user_message_counts[message.from_user.id] = 0 
+    # Сбрасываем таймер при старте
+    user_last_message_time[message.from_user.id] = 0
     
     text = (
         "👋 Здравствуйте! Я ИИ-менеджер компании <b>B2B Логистика</b>.\n\n"
@@ -279,14 +279,18 @@ async def handle_message(message: types.Message):
     username = message.from_user.username or "—"
     full_name = message.from_user.full_name
 
-    # --- ПРОВЕРКА ЛИМИТА СООБЩЕНИЙ ---
-    count = user_message_counts.get(user_id, 0)
-    if count >= MAX_MESSAGES_PER_DAY:
-        await message.answer("⚠️ Вы превысили дневной лимит сообщений. Пожалуйста, оставьте ваш номер телефона, и менеджер свяжется с вами для обсуждения деталей.")
+    # --- АНТИ-ФЛУД (защита от спама) ---
+    import time
+    current_time = time.time()
+    last_time = user_last_message_time.get(user_id, 0)
+    
+    # Если сообщения идут чаще, чем раз в 1 секунду
+    if current_time - last_time < 1.0:
+        await message.answer("⚠️ Пожалуйста, не так быстро. Я не успеваю обрабатывать запросы. Подождите пару секунд.")
         return
     
-    user_message_counts[user_id] = count + 1
-    # ---------------------------------
+    user_last_message_time[user_id] = current_time
+    # -----------------------------------
 
     add_to_memory(user_id, "user", user_text)
 
