@@ -41,6 +41,10 @@ def save_demo(data):
 demo_data = load_demo()
 adding_mode = {"active": False}
 
+# ============ ЛИМИТЫ НА СООБЩЕНИЯ ============
+user_message_counts = {} 
+MAX_MESSAGES_PER_DAY = 20 
+
 # ============ КЛЮЧЕВЫЕ СЛОВА ============
 DEMO_KEYWORDS = [
     "примеры работ", "пример работ", "покажи работы",
@@ -53,7 +57,6 @@ def is_demo_request(text):
     t = text.lower()
     return any(kw in t for kw in DEMO_KEYWORDS)
 
-
 def is_phone_message(text):
     patterns = [
         r"\+7[\s\-\(\)]?\d{3}[\s\-\(\)]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}",
@@ -64,7 +67,6 @@ def is_phone_message(text):
         if re.search(p, text):
             return True
     return False
-
 
 # ============ УВЕДОМЛЕНИЯ ============
 async def notify_admins(text, photo=None):
@@ -77,22 +79,22 @@ async def notify_admins(text, photo=None):
         except Exception as e:
             logging.error(f"Не удалось уведомить админа {admin_id}: {e}")
 
-
 def is_admin(message):
     return message.from_user.id in ADMIN_IDS
-
 
 # ============ /start ============
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
+    # Сброс лимита при старте (по желанию можно убрать)
+    user_message_counts[message.from_user.id] = 0 
+    
     text = (
-        "👋 Здравствуйте! Я ИИ-ассистент компании <b>B2B Логистика</b>.\n\n"
-        "Помогу с оптовыми поставками, грузоперевозками и складом.\n\n"
-        "Как я могу к вам обращаться? 😊"
+        "👋 Здравствуйте! Я ИИ-менеджер компании <b>B2B Логистика</b>.\n\n"
+        "Помогу рассчитать стоимость грузоперевозки, подобрать транспорт или организовать склад.\n\n"
+        "<b>Откуда и куда нужно доставить груз?</b> 😊"
     )
     await message.answer(text)
-
 
 # ============ /checklist ============
 @dp.message_handler(commands=["checklist"])
@@ -108,7 +110,6 @@ async def cmd_checklist(message: types.Message):
         "💡 <b>Расчёт индивидуальный.</b> Оставьте номер 👇"
     )
     await message.answer(text)
-
 
 # ============ /demo ============
 async def send_demo(chat_id):
@@ -128,7 +129,6 @@ async def send_demo(chat_id):
         except Exception as e:
             logging.error(f"Ошибка видео: {e}")
 
-
 @dp.message_handler(commands=["demo"])
 async def cmd_demo(message: types.Message):
     await send_demo(message.from_user.id)
@@ -136,7 +136,6 @@ async def cmd_demo(message: types.Message):
         "📋 Хотите заявку? Отправьте /checklist.\n"
         "Или оставьте номер — менеджер свяжется 👍"
     )
-
 
 # ============ АДМИН: демо ============
 @dp.message_handler(commands=["add_demo"])
@@ -150,7 +149,6 @@ async def cmd_add_demo(message: types.Message):
         "Когда закончишь — /stop_demo"
     )
 
-
 @dp.message_handler(commands=["stop_demo"])
 async def cmd_stop_demo(message: types.Message):
     if not is_admin(message):
@@ -160,13 +158,11 @@ async def cmd_stop_demo(message: types.Message):
         f"⏹ Выключено.\n📸 Фото: {len(demo_data['photos'])}\n🎥 Видео: {len(demo_data['videos'])}"
     )
 
-
 @dp.message_handler(commands=["show_list"])
 async def cmd_show_list(message: types.Message):
     if not is_admin(message):
         return
     await message.answer(f"📊 Фото: {len(demo_data['photos'])}\n🎥 Видео: {len(demo_data['videos'])}")
-
 
 @dp.message_handler(commands=["clear_demo"])
 async def cmd_clear_demo(message: types.Message):
@@ -177,7 +173,6 @@ async def cmd_clear_demo(message: types.Message):
     save_demo(demo_data)
     await message.answer("🗑 Демо-материалы удалены.")
 
-
 # ============ АДМИН: прочее ============
 @dp.message_handler(commands=["clear"])
 async def cmd_clear(message: types.Message):
@@ -186,13 +181,11 @@ async def cmd_clear(message: types.Message):
     user_memory.clear()
     await message.answer("🧹 Память очищена!")
 
-
 @dp.message_handler(commands=["stats"])
 async def cmd_stats(message: types.Message):
     if not is_admin(message):
         return
     await message.answer(f"📊 Активных диалогов: {len(user_memory)}")
-
 
 @dp.message_handler(commands=["help"])
 async def cmd_help(message: types.Message):
@@ -204,7 +197,6 @@ async def cmd_help(message: types.Message):
         "/clear, /stats"
     )
     await message.answer(text)
-
 
 # ============ ФОТО (админ + клиент) ============
 @dp.message_handler(content_types=["photo"])
@@ -241,7 +233,6 @@ async def handle_photo_unified(message: types.Message):
 
     await message.answer("📷 Спасибо за фото! Передал менеджеру.")
 
-
 # ============ ВИДЕО (админ + клиент) ============
 @dp.message_handler(content_types=["video"])
 async def handle_video_unified(message: types.Message):
@@ -277,7 +268,6 @@ async def handle_video_unified(message: types.Message):
 
     await message.answer("🎥 Спасибо за видео! Передал менеджеру.")
 
-
 # ============ ОБРАБОТКА ТЕКСТА ============
 @dp.message_handler(content_types=["text"])
 async def handle_message(message: types.Message):
@@ -288,6 +278,15 @@ async def handle_message(message: types.Message):
     user_text = message.text
     username = message.from_user.username or "—"
     full_name = message.from_user.full_name
+
+    # --- ПРОВЕРКА ЛИМИТА СООБЩЕНИЙ ---
+    count = user_message_counts.get(user_id, 0)
+    if count >= MAX_MESSAGES_PER_DAY:
+        await message.answer("⚠️ Вы превысили дневной лимит сообщений. Пожалуйста, оставьте ваш номер телефона, и менеджер свяжется с вами для обсуждения деталей.")
+        return
+    
+    user_message_counts[user_id] = count + 1
+    # ---------------------------------
 
     add_to_memory(user_id, "user", user_text)
 
@@ -321,13 +320,33 @@ async def handle_message(message: types.Message):
         return
 
     history = get_memory(user_id)[-10:]
+    
+    # --- БАЗА ЗНАНИЙ ДЛЯ ЛОГИСТА ---
+    logistics_prompt = {
+        "role": "system", 
+        "content": (
+            "Ты — профессиональный логист компании B2B Логистика. Общайся вежливо, кратко и по делу.\n"
+            "Твоя задача: узнать маршрут (откуда/куда), вес/объем груза и взять номер телефона.\n"
+            "ВАЖНО: Если клиент спрашивает цену, используй эти ориентировочные тарифы для расчета:\n"
+            "- Межгород (Алматы-Астана): от 150 000 тг за 20 тонн (фура).\n"
+            "- Межгород (Алматы-Шымкент): от 100 000 тг за 20 тонн.\n"
+            "- Городская доставка (Алматы): от 15 000 тг.\n"
+            "- Если вес меньше 1 тонны или это коробки: от 500 тг за 1 кг.\n"
+            "Когда называешь цену, всегда добавляй: 'Это ориентировочная стоимость, точный расчет сделает менеджер после уточнения деталей'. "
+            "Никогда не спорь с клиентом. Твоя цель — взять номер телефона для менеджера."
+        )
+    }
+    
+    # Добавляем инструкцию в начало истории
+    history.insert(0, logistics_prompt)
+
     ai_text = await ask_groq(history)
 
-    # ЗАЩИТА ОТ ПОВТОРОВ: если бот повторяет ответ — меняем
+    # ЗАЩИТА ОТ ПОВТОРОВ
     last_bot_messages = [m["content"] for m in history[-5:] if m.get("role") == "assistant"]
     if last_bot_messages and ai_text.strip() == last_bot_messages[-1].strip():
         logging.warning(f"⚠️ Бот повторился: {ai_text}")
-        ai_text = "Простите, я вас услышал. Уточните, пожалуйста, что именно нужно?"
+        ai_text = "Простите, я вас услышал. Уточните, пожалуйста, откуда и куда нужно доставить груз?"
 
     add_to_memory(user_id, "assistant", ai_text)
 
@@ -342,7 +361,6 @@ async def handle_message(message: types.Message):
             f"🤖 {ai_text[:250]}..."
         )
 
-
 # ============ HEALTH-CHECK ============
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -354,13 +372,11 @@ class HealthHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
-
 def run_health_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     logging.info(f"Health server on port {port}")
     server.serve_forever()
-
 
 if __name__ == "__main__":
     threading.Thread(target=run_health_server, daemon=True).start()
