@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.types import ParseMode
 from dotenv import load_dotenv
+import time # Для защиты от флуда
 
 from services.agent import ask_groq
 from services.memory import get_memory, add_to_memory, user_memory
@@ -42,7 +43,6 @@ demo_data = load_demo()
 adding_mode = {"active": False}
 
 # ============ ЗАЩИТА ОТ СПАМА (АНТИ-ФЛУД) ============
-# Если клиент пишет больше 3 сообщений подряд без пауз (за 10 секунд), бот делает паузу.
 user_last_message_time = {}
 
 # ============ КЛЮЧЕВЫЕ СЛОВА ============
@@ -86,7 +86,6 @@ def is_admin(message):
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
-    # Сбрасываем таймер при старте
     user_last_message_time[message.from_user.id] = 0
     
     text = (
@@ -280,11 +279,9 @@ async def handle_message(message: types.Message):
     full_name = message.from_user.full_name
 
     # --- АНТИ-ФЛУД (защита от спама) ---
-    import time
     current_time = time.time()
     last_time = user_last_message_time.get(user_id, 0)
     
-    # Если сообщения идут чаще, чем раз в 1 секунду
     if current_time - last_time < 1.0:
         await message.answer("⚠️ Пожалуйста, не так быстро. Я не успеваю обрабатывать запросы. Подождите пару секунд.")
         return
@@ -329,19 +326,13 @@ async def handle_message(message: types.Message):
     logistics_prompt = {
         "role": "system", 
         "content": (
-            "Ты — профессиональный логист компании B2B Логистика. Общайся вежливо, кратко и по делу.\n"
-            "Твоя задача: узнать маршрут (откуда/куда), вес/объем груза и взять номер телефона.\n"
-            "ВАЖНО: Если клиент спрашивает цену, используй эти ориентировочные тарифы для расчета:\n"
-            "- Межгород (Алматы-Астана): от 150 000 тг за 20 тонн (фура).\n"
-            "- Межгород (Алматы-Шымкент): от 100 000 тг за 20 тонн.\n"
-            "- Городская доставка (Алматы): от 15 000 тг.\n"
-            "- Если вес меньше 1 тонны или это коробки: от 500 тг за 1 кг.\n"
-            "Когда называешь цену, всегда добавляй: 'Это ориентировочная стоимость, точный расчет сделает менеджер после уточнения деталей'. "
-            "Никогда не спорь с клиентом. Твоя цель — взять номер телефона для менеджера."
+            "Ты — профессиональный логист компании B2B Логистика. Общайся вежливо, кратко и по делу. Твоя цель — узнать маршрут, вес/объем и предложить ориентировочную цену. "
+            "Если клиент не знает объем, не требуй его, а просто посчитай по весу. "
+            "Тарифы: Алматы-Астана — от 150 000 тг за 20 тонн. Если груз 150 кг — это примерно 5 000 - 10 000 тг (сборный груз). "
+            "Сначала назови цену, а потом скажи: «Для точного расчета и оформления заявки оставьте, пожалуйста, ваш номер телефона, менеджер свяжется с вами»."
         )
     }
     
-    # Добавляем инструкцию в начало истории
     history.insert(0, logistics_prompt)
 
     ai_text = await ask_groq(history)
