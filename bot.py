@@ -80,7 +80,7 @@ async def notify_admins(text, photo=None):
 def is_admin(message):
     return message.from_user.id in ADMIN_IDS
 
-# ============ /start С АНИМАЦИЕЙ И КНОПКАМИ ============
+# ============ /start С ВИДЕО И КНОПКАМИ ============
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
@@ -93,9 +93,10 @@ async def cmd_start(message: types.Message):
     btn3 = InlineKeyboardButton(text="📞 Связаться с менеджером", callback_data="call")
     keyboard.add(btn1, btn2, btn3)
 
-    await bot.send_animation(
+    # Отправляем ваше видео с текстом и кнопками
+    await bot.send_video(
         message.from_user.id,
-        animation="https://cdn.pixabay.com/video/2023/10/29/187058-879458737_large.mp4",
+        video="BAACAgIAAxkBAAEk_8trCcAd_e14olxcyGUJM1oC-4Be1wACcK8AAoVeUUitrT3geArXfz0E",
         caption=(
             "🚛 <b>B2B Логистика</b>\n"
             "<i>Быстро. Надежно. 24/7.</i>\n\n"
@@ -110,6 +111,7 @@ async def cmd_start(message: types.Message):
 async def process_callback(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     user_id = callback_query.from_user.id
+    
     user_memory[user_id] = []
 
     if callback_query.data == 'calc':
