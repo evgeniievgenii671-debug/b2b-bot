@@ -6,7 +6,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
-from aiogram.types import ParseMode
+from aiogram.types import ParseMode, InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 import time
 
@@ -80,23 +80,50 @@ async def notify_admins(text, photo=None):
 def is_admin(message):
     return message.from_user.id in ADMIN_IDS
 
-# ============ /start С ГИФКОЙ ============
+# ============ /start С ГИФКОЙ И КНОПКАМИ ============
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
     user_last_message_time[message.from_user.id] = 0
     
+    # Создаем красивые кнопки
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    btn1 = InlineKeyboardButton(text="🚛 Рассчитать доставку", callback_data="calc")
+    btn2 = InlineKeyboardButton(text="💪 Услуги грузчиков", callback_data="loaders")
+    btn3 = InlineKeyboardButton(text="📞 Связаться с менеджером", callback_data="call")
+    keyboard.add(btn1, btn2, btn3)
+
     await bot.send_animation(
         message.from_user.id,
         animation="BAACAgIAAxkBAAEk_2hrCa9UF1WI-1UWdapxzxBV1DIVJAAcyq8AAozESEjv-uUFT_Zrwj0E",
         caption=(
             "🚛 <b>B2B Логистика</b>\n"
             "<i>Быстро. Надежно. 24/7.</i>\n\n"
-            "👋 Здравствуйте! Я ваш ИИ-менеджер. Сейчас рассчитаю стоимость вашей перевозки.\n\n"
-            "📍 <b>Откуда и куда везем груз?</b>"
+            "👋 Здравствуйте! Я ваш ИИ-менеджер. Выберите, что вас интересует, или просто напишите ваш вопрос:"
         ),
-        parse_mode="HTML"
+        parse_mode="HTML",
+        reply_markup=keyboard
     )
+
+# ============ ОБРАБОТКА КНОПОК ============
+@dp.callback_query_handler(lambda c: c.data in ['calc', 'loaders', 'call'])
+async def process_callback(callback_query: types.CallbackQuery):
+    await bot.answer_callback_query(callback_query.id)
+    user_id = callback_query.from_user.id
+    
+    # Очищаем историю при нажатии кнопки, чтобы начать новый диалог
+    user_memory[user_id] = []
+
+    if callback_query.data == 'calc':
+        msg = "Отлично! Давайте рассчитаем доставку. 📍 Откуда и куда нужно доставить груз?"
+    elif callback_query.data == 'loaders':
+        msg = "Грузчики — от 10 000 тг. Напишите, какой объем работы и адрес, и я рассчитаю. 📦"
+    else:
+        msg = "Пожалуйста, оставьте ваш номер телефона, и менеджер свяжется с вами в течение 15 минут."
+
+    # Отправляем сообщение и сохраняем его в память, чтобы ИИ знал контекст
+    sent_msg = await bot.send_message(user_id, msg)
+    add_to_memory(user_id, "assistant", msg)
 
 # ============ /checklist ============
 @dp.message_handler(commands=["checklist"])
