@@ -80,7 +80,7 @@ async def notify_admins(text, photo=None):
 def is_admin(message):
     return message.from_user.id in ADMIN_IDS
 
-# ============ /start С ГИФКОЙ И КНОПКАМИ ============
+# ============ /start С АНИМАЦИЕЙ И КНОПКАМИ ============
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
@@ -95,7 +95,7 @@ async def cmd_start(message: types.Message):
 
     await bot.send_animation(
         message.from_user.id,
-        animation="BAACAgIAAxkBAAEk_2hrCa9UF1WI-1UWdapxzxBV1DIVJAAcyq8AAozESEjv-uUFT_Zrwj0E",
+        animation="https://cdn.pixabay.com/video/2023/10/29/187058-879458737_large.mp4",
         caption=(
             "🚛 <b>B2B Логистика</b>\n"
             "<i>Быстро. Надежно. 24/7.</i>\n\n"
@@ -110,8 +110,6 @@ async def cmd_start(message: types.Message):
 async def process_callback(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     user_id = callback_query.from_user.id
-    
-    # Очищаем историю при нажатии кнопки, чтобы начать новый диалог
     user_memory[user_id] = []
 
     if callback_query.data == 'calc':
@@ -121,7 +119,6 @@ async def process_callback(callback_query: types.CallbackQuery):
     else:
         msg = "Пожалуйста, оставьте ваш номер телефона, и менеджер свяжется с вами в течение 15 минут."
 
-    # Отправляем сообщение и сохраняем его в память, чтобы ИИ знал контекст
     sent_msg = await bot.send_message(user_id, msg)
     add_to_memory(user_id, "assistant", msg)
 
