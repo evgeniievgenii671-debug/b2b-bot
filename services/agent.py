@@ -49,6 +49,18 @@ SYSTEM_PROMPT = """Роль: Вежливый ИИ-эксперт компани
 Клиент: Завтра. Давайте оформлять.
 Бот: Принято! Оставьте, пожалуйста, ваш номер телефона — менеджер свяжется и всё подтвердит.
 """
+
+BAD_MODELS = [
+    "whisper", "tts", "orpheus", "guard",
+    "arabic", "saudi", "allam",
+    "llama-3.2-1b", "llama-3.2-3b",
+]
+
+PRIORITY = [
+    "openai/gpt-oss-120b",
+    "moonshotai/kimi-k2",
+]
+
 async def get_good_models() -> list:
     try:
         response = await client.models.list()
@@ -60,7 +72,6 @@ async def get_good_models() -> list:
         logger.error(f"Ошибка получения моделей: {e}")
         return []
 
-
 def sort_by_priority(models: list) -> list:
     result = []
     for pref in PRIORITY:
@@ -71,7 +82,6 @@ def sort_by_priority(models: list) -> list:
         if m not in result:
             result.append(m)
     return result
-
 
 async def ask_groq(history):
     if not OPENAI_API_KEY:
@@ -94,7 +104,7 @@ async def ask_groq(history):
                 model=model,
                 messages=messages,
                 temperature=0.6,
-                max_tokens=200,
+                max_tokens=1000,
             )
             text = response.choices[0].message.content
 
