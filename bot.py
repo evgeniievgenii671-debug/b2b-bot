@@ -275,6 +275,12 @@ async def handle_message(message: types.Message):
 
     user_id = message.from_user.id
     user_text = message.text
+        # --- ЛОВИМ ГИФКУ ДЛЯ ID ---
+    if message.animation or message.video:
+        file_id = message.animation.file_id if message.animation else message.video.file_id
+        await message.answer(f"ID вашей гифки: <code>{file_id}</code>")
+        return
+    # --------------------------
     username = message.from_user.username or "—"
     full_name = message.from_user.full_name
 
