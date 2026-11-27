@@ -40,7 +40,7 @@ def save_demo(data):
 demo_data = load_demo()
 adding_mode = {"active": False}
 
-# ============ ЗАЩИТА ОТ СПАМА (АНТИ-ФЛУД) ============
+# ============ ЗАЩИТА ОТ СПАМА ============
 user_last_message_time = {}
 
 # ============ КЛЮЧЕВЫЕ СЛОВА ============
@@ -80,28 +80,21 @@ async def notify_admins(text, photo=None):
 def is_admin(message):
     return message.from_user.id in ADMIN_IDS
 
-# ============ /start С ВИДЕО И КНОПКАМИ ============
+# ============ /start (ПОКА БЕЗ ВИДЕО, ЧТОБЫ НЕ ПАДАЛ) ============
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
     user_last_message_time[message.from_user.id] = 0
     
-    # Создаем красивые кнопки
     keyboard = InlineKeyboardMarkup(row_width=1)
     btn1 = InlineKeyboardButton(text="🚛 Рассчитать доставку", callback_data="calc")
     btn2 = InlineKeyboardButton(text="💪 Услуги грузчиков", callback_data="loaders")
     btn3 = InlineKeyboardButton(text="📞 Связаться с менеджером", callback_data="call")
     keyboard.add(btn1, btn2, btn3)
 
-    # Отправляем ваше видео с текстом и кнопками
-    await bot.send_video(
-        message.from_user.id,
-        video="BAACAgIAAxkBAAEk_8trCcAd_e14olxcyGUJM1oC-4Be1wACcK8AAoVeUUitrT3geArXfz0E",
-        caption=(
-            "🚛 <b>B2B Логистика</b>\n"
-            "<i>Быстро. Надежно. 24/7.</i>\n\n"
-            "👋 Здравствуйте! Я ваш ИИ-менеджер. Выберите, что вас интересует, или просто напишите ваш вопрос:"
-        ),
+    await message.answer(
+        "🚛 <b>B2B Логистика</b>\n\n"
+        "👋 Здравствуйте! Я ваш ИИ-менеджер. Выберите, что вас интересует, или просто напишите ваш вопрос:",
         parse_mode="HTML",
         reply_markup=keyboard
     )
@@ -111,7 +104,6 @@ async def cmd_start(message: types.Message):
 async def process_callback(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
     user_id = callback_query.from_user.id
-    
     user_memory[user_id] = []
 
     if callback_query.data == 'calc':
@@ -124,12 +116,48 @@ async def process_callback(callback_query: types.CallbackQuery):
     sent_msg = await bot.send_message(user_id, msg)
     add_to_memory(user_id, "assistant", msg)
 
+# ============ ВИДЕО (ЛОВИМ ID В ЛОГИ) ============
+@dp.message_handler(content_types=["video"])
+async def handle_video_unified(message: types.Message):
+    logging.info(f"!!! ВИДЕО ID: {message.video.file_id} !!!")
+    
+    if adding_mode["active"] and is_admin(message):
+        file_id = message.video.file_id
+        demo_data["videos"].append({"file_id": file_id, "caption": message.caption or ""})
+        save_demo(demo_data)
+        await message.answer(f"✅ Видео ({len(demo_data['videos'])} шт.)")
+        return
+
+    user_id = message.from_user.id
+    username = message.from_user.username or "—"
+    full_name = message.from_user.full_name
+    caption = message.caption or "(без подписи)"
+    video_id = message.video.file_id
+
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_video(
+                admin_id,
+                video=video_id,
+                caption=(
+                    f"🎥 <b>Клиент прислал видео</b>\n\n"
+                    f"👤 {full_name}\n"
+                    f"📱 @{username}\n"
+                    f"🆔 <code>{user_id}</code>\n\n"
+                    f"💬 {caption}"
+                ),
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            logging.error(f"Ошибка пересылки видео: {e}")
+
+    await message.answer("🎥 Спасибо за видео! Передал менеджеру.")
+
 # ============ /checklist ============
 @dp.message_handler(commands=["checklist"])
 async def cmd_checklist(message: types.Message):
     text = (
         "📋 <b>Чек-лист для заявки</b>\n\n"
-        "Чтобы мы сделали точный расчёт, уточните:\n\n"
         "1️⃣ <b>Что нужно</b> — товар, перевозка или склад?\n"
         "2️⃣ <b>Объём</b> — тонны, м³, паллеты?\n"
         "3️⃣ <b>Откуда и куда</b> — города?\n"
@@ -164,137 +192,6 @@ async def cmd_demo(message: types.Message):
         "📋 Хотите заявку? Отправьте /checklist.\n"
         "Или оставьте номер — менеджер свяжется 👍"
     )
-
-# ============ АДМИН: демо ============
-@dp.message_handler(commands=["add_demo"])
-async def cmd_add_demo(message: types.Message):
-    if not is_admin(message):
-        return
-    adding_mode["active"] = True
-    await message.answer(
-        "✅ Режим добавления включён.\n\n"
-        "Отправляй фото и видео (можно с подписью).\n"
-        "Когда закончишь — /stop_demo"
-    )
-
-@dp.message_handler(commands=["stop_demo"])
-async def cmd_stop_demo(message: types.Message):
-    if not is_admin(message):
-        return
-    adding_mode["active"] = False
-    await message.answer(
-        f"⏹ Выключено.\n📸 Фото: {len(demo_data['photos'])}\n🎥 Видео: {len(demo_data['videos'])}"
-    )
-
-@dp.message_handler(commands=["show_list"])
-async def cmd_show_list(message: types.Message):
-    if not is_admin(message):
-        return
-    await message.answer(f"📊 Фото: {len(demo_data['photos'])}\n🎥 Видео: {len(demo_data['videos'])}")
-
-@dp.message_handler(commands=["clear_demo"])
-async def cmd_clear_demo(message: types.Message):
-    if not is_admin(message):
-        return
-    demo_data["photos"] = []
-    demo_data["videos"] = []
-    save_demo(demo_data)
-    await message.answer("🗑 Демо-материалы удалены.")
-
-# ============ АДМИН: прочее ============
-@dp.message_handler(commands=["clear"])
-async def cmd_clear(message: types.Message):
-    if not is_admin(message):
-        return
-    user_memory.clear()
-    await message.answer("🧹 Память очищена!")
-
-@dp.message_handler(commands=["stats"])
-async def cmd_stats(message: types.Message):
-    if not is_admin(message):
-        return
-    await message.answer(f"📊 Активных диалогов: {len(user_memory)}")
-
-@dp.message_handler(commands=["help"])
-async def cmd_help(message: types.Message):
-    text = (
-        "🤖 <b>Команды:</b>\n\n"
-        "/start, /checklist, /demo, /help\n\n"
-        "<b>Админ:</b>\n"
-        "/add_demo, /stop_demo, /show_list, /clear_demo\n"
-        "/clear, /stats"
-    )
-    await message.answer(text)
-
-# ============ ФОТО (админ + клиент) ============
-@dp.message_handler(content_types=["photo"])
-async def handle_photo_unified(message: types.Message):
-    if adding_mode["active"] and is_admin(message):
-        file_id = message.photo[-1].file_id
-        demo_data["photos"].append({"file_id": file_id, "caption": message.caption or ""})
-        save_demo(demo_data)
-        await message.answer(f"✅ Фото ({len(demo_data['photos'])} шт.)")
-        return
-
-    user_id = message.from_user.id
-    username = message.from_user.username or "—"
-    full_name = message.from_user.full_name
-    caption = message.caption or "(без подписи)"
-    photo_id = message.photo[-1].file_id
-
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.send_photo(
-                admin_id,
-                photo=photo_id,
-                caption=(
-                    f"📷 <b>Клиент прислал фото</b>\n\n"
-                    f"👤 {full_name}\n"
-                    f"📱 @{username}\n"
-                    f"🆔 <code>{user_id}</code>\n\n"
-                    f"💬 {caption}"
-                ),
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            logging.error(f"Ошибка пересылки фото: {e}")
-
-    await message.answer("📷 Спасибо за фото! Передал менеджеру.")
-
-# ============ ВИДЕО (админ + клиент) ============
-@dp.message_handler(content_types=["video"])
-async def handle_video_unified(message: types.Message):
-    if adding_mode["active"] and is_admin(message):
-        file_id = message.video.file_id
-        demo_data["videos"].append({"file_id": file_id, "caption": message.caption or ""})
-        save_demo(demo_data)
-        await message.answer(f"✅ Видео ({len(demo_data['videos'])} шт.)")
-        return
-
-    user_id = message.from_user.id
-    username = message.from_user.username or "—"
-    full_name = message.from_user.full_name
-    caption = message.caption or "(без подписи)"
-    video_id = message.video.file_id
-
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.send_video(
-                admin_id,
-                video=video_id,
-                caption=(
-                    f"🎥 <b>Клиент прислал видео</b>\n\n"
-                    f"👤 {full_name}\n"
-                    f"📱 @{username}\n"
-                    f"🆔 <code>{user_id}</code>\n\n"
-                    f"💬 {caption}"
-                ),
-                parse_mode="HTML"
-            )
-        except Exception as e:
-            logging.error(f"Ошибка пересылки видео: {e}")
-
-    await message.answer("🎥 Спасибо за видео! Передал менеджеру.")
 
 # ============ ОБРАБОТКА ТЕКСТА ============
 @dp.message_handler(content_types=["text"])
@@ -355,7 +252,7 @@ async def handle_message(message: types.Message):
             "Ты — профессиональный логист компании B2B Логистика. Общайся вежливо, кратко и по делу.\n"
             "Твоя задача: проконсультировать клиента по грузоперевозке, назвать цену и собрать заявку.\n"
             "ВАЖНО: Если клиент спрашивает цену, называй ориентировочную стоимость: Алматы-Астана от 150 000 тг за 20 тонн; если груз до 500 кг — от 500 тг/кг.\n"
-            "ПРАВИЛО ПО ТЕЛЕФОНУ: Попроси оставить номер телефона ТОЛЬКО ОДИН РАЗ, когда назовешь цену. Если клиент уже оставил номер или задает другие вопросы (про сроки, тип машины, условия), НЕ ПРОСИ НОМЕР ПОВТОРНО. Просто отвечай на его вопросы и помогай.\n"
+            "ПРАВИЛО ПО ТЕЛЕФОНУ: Попроси оставить номер телефона ТОЛЬКО ОДИН РАЗ, когда назовешь цену. Если клиент уже оставил номер или задает другие вопросы, НЕ ПРОСИ НОМЕР ПОВТОРНО.\n"
             "Если клиент не знает объем — не требуй его, считай по весу."
         )
     }
