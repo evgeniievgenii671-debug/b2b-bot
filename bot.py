@@ -16,12 +16,10 @@ from services.memory import get_memory, add_to_memory, user_memory
 load_dotenv()
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-
 ADMIN_IDS_RAW = os.environ.get("ADMIN_IDS", os.environ.get("ADMIN_ID", "0"))
 ADMIN_IDS = [int(x.strip()) for x in ADMIN_IDS_RAW.split(",") if x.strip().isdigit()]
 
 logging.basicConfig(level=logging.INFO)
-
 bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
 dp = Dispatcher(bot)
 dp.middleware.setup(LoggingMiddleware())
@@ -82,18 +80,23 @@ async def notify_admins(text, photo=None):
 def is_admin(message):
     return message.from_user.id in ADMIN_IDS
 
-# ============ /start ============
+# ============ /start С ГИФКОЙ ============
 @dp.message_handler(commands=["start"])
 async def cmd_start(message: types.Message):
     user_memory[message.from_user.id] = []
     user_last_message_time[message.from_user.id] = 0
     
-    text = (
-        "👋 Здравствуйте! Я ИИ-менеджер компании <b>B2B Логистика</b>.\n\n"
-        "Помогу рассчитать стоимость грузоперевозки, подобрать транспорт или организовать склад.\n\n"
-        "<b>Откуда и куда нужно доставить груз?</b> 😊"
+    await bot.send_animation(
+        message.from_user.id,
+        animation="BAACAgIAAxkBAAEk_2hrCa9UF1WI-1UWdapxzxBV1DIVJAAcyq8AAozESEjv-uUFT_Zrwj0E",
+        caption=(
+            "🚛 <b>B2B Логистика</b>\n"
+            "<i>Быстро. Надежно. 24/7.</i>\n\n"
+            "👋 Здравствуйте! Я ваш ИИ-менеджер. Сейчас рассчитаю стоимость вашей перевозки.\n\n"
+            "📍 <b>Откуда и куда везем груз?</b>"
+        ),
+        parse_mode="HTML"
     )
-    await message.answer(text)
 
 # ============ /checklist ============
 @dp.message_handler(commands=["checklist"])
@@ -275,16 +278,9 @@ async def handle_message(message: types.Message):
 
     user_id = message.from_user.id
     user_text = message.text
-        # --- ЛОВИМ ГИФКУ ДЛЯ ID ---
-    if message.animation or message.video:
-        file_id = message.animation.file_id if message.animation else message.video.file_id
-        await message.answer(f"ID вашей гифки: <code>{file_id}</code>")
-        return
-    # --------------------------
     username = message.from_user.username or "—"
     full_name = message.from_user.full_name
 
-    # --- АНТИ-ФЛУД (защита от спама) ---
     current_time = time.time()
     last_time = user_last_message_time.get(user_id, 0)
     
@@ -293,7 +289,6 @@ async def handle_message(message: types.Message):
         return
     
     user_last_message_time[user_id] = current_time
-    # -----------------------------------
 
     add_to_memory(user_id, "user", user_text)
 
@@ -328,30 +323,26 @@ async def handle_message(message: types.Message):
 
     history = get_memory(user_id)[-10:]
     
-    # --- БАЗА ЗНАНИЙ ДЛЯ ЛОГИСТА (ОБНОВЛЕННАЯ) ---
     logistics_prompt = {
         "role": "system", 
         "content": (
-            "Ты — профессиональный логист компании B2B Логистика. Общайся вежливо, кратко и по делу. "
-            "Твоя цель — помочь клиенту рассчитать доставку. "
-            "ВАЖНО: НЕ ЗДОРОВАЙСЯ и НЕ ПРЕДСТАВЛЯЙСЯ повторно, если диалог уже начат. Если клиент пишет 'Алматы-Астана' и вес — сразу переходи к расчету или уточнению деталей (сроки, тип груза, нужна ли машина с грузчиками). "
-            "ПРАВИЛО ПО ЦЕНЕ: Называй цену сразу, как только понял вес и маршрут (например, '10 кг Алматы-Астана — от 5000 тг'). "
-            "ЖЕЛЕЗНОЕ ПРАВИЛО ПО ТЕЛЕФОНУ: Проси номер телефона ТОЛЬКО ОДИН РАЗ, и только в том случае, если клиент уже согласился на доставку (сказал 'да', 'оформляйте', 'везите'). Если клиент просто уточняет детали (сроки, грузчики, оплата) — НЕ проси телефон, просто отвечай на вопрос. Никогда не проси телефон повторно."
+            "Ты — профессиональный логист компании B2B Логистика. Общайся вежливо, кратко и по делу.\n"
+            "Твоя задача: проконсультировать клиента по грузоперевозке, назвать цену и собрать заявку.\n"
+            "ВАЖНО: Если клиент спрашивает цену, называй ориентировочную стоимость: Алматы-Астана от 150 000 тг за 20 тонн; если груз до 500 кг — от 500 тг/кг.\n"
+            "ПРАВИЛО ПО ТЕЛЕФОНУ: Попроси оставить номер телефона ТОЛЬКО ОДИН РАЗ, когда назовешь цену. Если клиент уже оставил номер или задает другие вопросы (про сроки, тип машины, условия), НЕ ПРОСИ НОМЕР ПОВТОРНО. Просто отвечай на его вопросы и помогай.\n"
+            "Если клиент не знает объем — не требуй его, считай по весу."
         )
     }
     
     history.insert(0, logistics_prompt)
-
     ai_text = await ask_groq(history)
 
-    # ЗАЩИТА ОТ ПОВТОРОВ
     last_bot_messages = [m["content"] for m in history[-5:] if m.get("role") == "assistant"]
     if last_bot_messages and ai_text.strip() == last_bot_messages[-1].strip():
         logging.warning(f"⚠️ Бот повторился: {ai_text}")
         ai_text = "Простите, я вас услышал. Уточните, пожалуйста, откуда и куда нужно доставить груз?"
 
     add_to_memory(user_id, "assistant", ai_text)
-
     await message.answer(ai_text)
 
     if not phone_detected:
